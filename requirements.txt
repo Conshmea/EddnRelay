@@ -1,4 +1,4 @@
-websockets
+websockets>=11.0.3
 requests
 pyzmq
 python-dotenv

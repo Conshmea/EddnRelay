@@ -62,6 +62,7 @@ Connect to the WebSocket server at `ws://<RELAY_HOST>:<RELAY_PORT>` and send a f
 
 ### Filter Types
 
+- **Exists**: Match when a specific path exists
 - **Exact Match**: Match exact values at specific paths
 - **Regex**: Match values using regular expressions
 - **All**: Combine multiple conditions with AND logic

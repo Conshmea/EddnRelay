@@ -19,11 +19,11 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["exact", "regex", "all", "any"]
+            "enum": ["exact", "regex", "all", "any", "exists"]
           },
           "path": {
             "type": "string",
-            "description": "Dot-separated JSON path to apply the condition (for 'exact' and 'regex')"
+            "description": "Dot-separated JSON path to apply the condition (for 'exists', 'exact' and 'regex')"
           },
           "value": {
             "type": "string",
@@ -70,6 +70,14 @@
             },
             "then": {
               "required": ["conditions"]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "exists" } }
+            },
+            "then": {
+              "required": ["path"]
             }
           }
         ]

@@ -19,11 +19,54 @@ class FilterCondition:
         raise NotImplementedError
 
 ConditionType = Union[
+    'ExistsCondition',
     'ExactCondition',
     'RegexCondition',
     'AllCondition',
     'AnyCondition'
 ]
+
+class ExistsCondition(FilterCondition):
+    """
+    A condition that matches when a value at a specified path exists in the data.
+    
+    Attributes:
+        path: Sequence of keys to traverse in the data
+    """
+    def __init__(self, path: Sequence[str]):
+        """
+        Initialize an existence condition.
+        
+        Args:
+            path: Sequence of keys to traverse in the data
+        """
+        self.path = path
+        logger.debug("Adding exists filter for path: %s", '.'.join(path))
+        
+    def matches(self, data: Dict) -> bool:
+        """Check if the """
+        return self.check_value(data, list(self.path))
+
+    def check_value(self, data: Dict, path: List[str]) -> bool:
+        """
+        Check if the value at the specified path matches the target value.
+        
+        Args:
+            data: The data to check against
+        """
+        current = data
+        remaining_path = list(path)
+        for key in path:
+            if isinstance(current, list):
+                return any(self.check_value(item, remaining_path.copy()) for item in current)
+            if not isinstance(current, dict) or key not in current:
+                logger.debug("ExistsCondition: Path %s not found in data", '.'.join(self.path))
+                return False
+            current = current[key]
+            remaining_path = remaining_path[1:]
+        result = current is not None
+        logger.debug("ExistsCondition: Path %s match result: %s", '.'.join(self.path), result)
+        return result
 
 class ExactCondition(FilterCondition):
     """

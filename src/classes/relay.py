@@ -4,7 +4,7 @@ from typing import Dict
 import json
 import websockets
 
-from src.classes.filter import Filter, AllCondition, AnyCondition, ExactCondition, RegexCondition
+from src.classes.filter import Filter, AllCondition, AnyCondition, ExactCondition, RegexCondition, ExistsCondition
 from src.constants import RELAY_PORT, RELAY_HOST
 
 class Relay:
@@ -52,7 +52,7 @@ class Relay:
             await websocket.close()
             del self.clients[websocket]
 
-    def _parse_condition(self, condition_data: dict) -> RegexCondition | ExactCondition | AllCondition | AnyCondition:
+    def _parse_condition(self, condition_data: dict) -> ExistsCondition  | RegexCondition | ExactCondition | AllCondition | AnyCondition:
         """
         Parse a filter condition from client data.
         
@@ -67,7 +67,9 @@ class Relay:
             KeyError: If required fields are missing
         """
         try:
-            if condition_data['type'] == 'exact':
+            if condition_data['type'] == 'exists':
+                return ExistsCondition(condition_data['path'].split('.'))
+            elif condition_data['type'] == 'exact':
                 return ExactCondition(condition_data['path'].split('.'), condition_data['value'])
             elif condition_data['type'] == 'regex':
                 return RegexCondition(condition_data['path'].split('.'), condition_data['pattern'])

@@ -1,0 +1,79 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "EDDN WebSocket Filter Message",
+    "description": "A message sent by a WebSocket client to update its filter",
+    "type": "object",
+    "required": ["type", "filter"],
+    "properties": {
+      "type": {
+        "type": "string",
+        "const": "filter",
+        "description": "The type of message being sent (must be 'filter')"
+      },
+      "filter": { "$ref": "#/$defs/Condition" }
+    },
+    "$defs": {
+      "Condition": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["exact", "regex", "all", "any"]
+          },
+          "path": {
+            "type": "string",
+            "description": "Dot-separated JSON path to apply the condition (for 'exact' and 'regex')"
+          },
+          "value": {
+            "type": "string",
+            "description": "Exact value to match (required for 'exact')"
+          },
+          "pattern": {
+            "type": "string",
+            "description": "Regex pattern to match (required for 'regex')"
+          },
+          "conditions": {
+            "type": "array",
+            "items": { "$ref": "#/$defs/Condition" },
+            "description": "Nested conditions (required for 'all' and 'any')"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "type": { "const": "exact" } }
+            },
+            "then": {
+              "required": ["path", "value"]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "regex" } }
+            },
+            "then": {
+              "required": ["path", "pattern"]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "all" } }
+            },
+            "then": {
+              "required": ["conditions"]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "any" } }
+            },
+            "then": {
+              "required": ["conditions"]
+            }
+          }
+        ]
+      }
+    }
+  }
+  

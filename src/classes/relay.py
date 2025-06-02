@@ -45,9 +45,11 @@ class Relay:
                     self.clients[websocket] = new_filter
         except websockets.exceptions.ConnectionClosed:
             self.logger.info("Client %s disconnected", websocket.remote_address)
+            await websocket.close()
             del self.clients[websocket]
         except (json.JSONDecodeError, KeyError, ValueError) as e:
-            self.logger.error("Error handling client message: %s", str(e), exc_info=True)
+            self.logger.error("Error handling client message: %s", str(e), exc_info=False)
+            await websocket.close()
             del self.clients[websocket]
 
     def _parse_condition(self, condition_data: dict) -> RegexCondition | ExactCondition | AllCondition | AnyCondition:

@@ -48,12 +48,25 @@ class ExactCondition(FilterCondition):
 
     def matches(self, data: Dict) -> bool:
         """Check if the value at the specified path exactly matches the target value."""
+        return self.check_value(data, list(self.path))
+
+    def check_value(self, data: Dict, path: List[str]) -> bool:
+        """
+        Check if the value at the specified path matches the target value.
+        
+        Args:
+            data: The data to check against
+        """
         current = data
-        for key in self.path:
+        remaining_path = list(path)
+        for key in path:
+            if isinstance(current, list):
+                return any(self.check_value(item, remaining_path.copy()) for item in current)
             if not isinstance(current, dict) or key not in current:
                 logger.debug("ExactCondition: Path %s not found in data", '.'.join(self.path))
                 return False
             current = current[key]
+            remaining_path = remaining_path[1:]
         result = current == self.value
         logger.debug("ExactCondition: Path %s match result: %s", '.'.join(self.path), result)
         return result
@@ -89,12 +102,25 @@ class RegexCondition(FilterCondition):
 
     def matches(self, data: Dict) -> bool:
         """Check if the value at the specified path matches the regex pattern."""
+        return self.check_value(data, list(self.path))
+
+    def check_value(self, data: Dict, path: List[str]) -> bool:
+        """
+        Check if the value at the specified path matches the target value.
+        
+        Args:
+            data: The data to check against
+        """
         current = data
-        for key in self.path:
+        remaining_path = list(path)
+        for key in path:
+            if isinstance(current, list):
+                return any(self.check_value(item, remaining_path.copy()) for item in current)
             if not isinstance(current, dict) or key not in current:
                 logger.debug("RegexCondition: Path %s not found in data", '.'.join(self.path))
                 return False
             current = current[key]
+            remaining_path = remaining_path[1:]
         result = bool(self.regex.match(str(current)))
         logger.debug("RegexCondition: Path %s match result: %s", '.'.join(self.path), result)
         return result

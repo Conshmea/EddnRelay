@@ -6,7 +6,7 @@ import websockets
 
 class EddnRelayClient:
     """A WebSocket client for connecting to and receiving data from an EDDN relay."""
-    def __init__(self, host: str, port: int, new_filter: dict):
+    def __init__(self, uri: str, new_filter: dict):
         """Initialize the client with connection details and message filters.
         
         Args:
@@ -14,7 +14,7 @@ class EddnRelayClient:
             port (int): The relay server port
             new_filter (dict): Filter configuration for message filtering
         """
-        self.uri = f"ws://{host}:{port}"
+        self.uri = uri
         self.filters = new_filter
 
     async def update_filters(self, websocket, new_filter: dict):
@@ -58,17 +58,19 @@ class EddnRelayClient:
         await self.connect()
 
 def main():
-    # Define a filter for EDDN messages
-    # This filter will only pass messages that:
-    # 1. Match the exact value "Scan" in the "message.event" field
     new_filter = {
-                    "type": "exact",
-                    "path": "message.event",
-                    "value": "Scan"
-                }
+                "type": "all",
+                "conditions": [
+                    {
+                        "type": "exact",
+                        "path": "message.event",
+                        "value": "Scan"
+                    }
+                ]
+            }
 
     # Create and run the client
-    client = EddnRelayClient("localhost", 9600, new_filter)
+    client = EddnRelayClient("ws://localhost:9600/ws", new_filter)
     asyncio.run(client.run())
 
 if __name__ == "__main__":

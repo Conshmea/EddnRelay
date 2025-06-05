@@ -16,6 +16,8 @@ A WebSocket relay server for Elite Dangerous Data Network (EDDN) messages with c
 - Python 3.10 or higher
 - ZeroMQ library
 - WebSockets support
+- FastApi
+- Uvicorn
 
 ## Installation
 
@@ -47,7 +49,7 @@ python -m src.application
 
 ### Client Connection
 
-Connect to the WebSocket server at `ws://<RELAY_HOST>:<RELAY_PORT>` and send a filter configuration:
+Connect to the WebSocket server at `ws://<RELAY_HOST>:<RELAY_PORT>/ws` and send a filter configuration:
 
 ```json
 {

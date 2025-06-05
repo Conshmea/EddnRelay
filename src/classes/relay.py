@@ -1,28 +1,26 @@
-import asyncio
 import logging
 from typing import Dict
 import json
-import websockets
+from fastapi import WebSocket
 
 from src.classes.filter import Filter, AllCondition, AnyCondition, ExactCondition, RegexCondition, ExistsCondition
-from src.constants import RELAY_PORT, RELAY_HOST
 
 class Relay:
     """
     A WebSocket server that relays filtered EDDN messages to connected clients.
     
     Attributes:
-        clients (Dict[websockets.WebSocketServerProtocol, Filter]): Connected clients and their filters
+        clients (Dict[WebSocket, Filter]): Connected clients and their filters
         logger: Logger instance for the class
     """
 
     def __init__(self):
         """Initialize the relay with an empty client dictionary."""
-        self.clients: Dict[websockets.WebSocketServerProtocol, Filter] = {}
+        self.clients: Dict[WebSocket, Filter] = {}
         self.logger = logging.getLogger('EddnRelay')
         self.logger.info("Relay instance initialized")
 
-    async def register_client(self, websocket: websockets.WebSocketServerProtocol):
+    async def register_client(self, websocket: WebSocket):
         """
         Handle new client connections and their filter messages.
         
@@ -32,24 +30,33 @@ class Relay:
         Maintains the connection until the client disconnects or an error occurs.
         Processes filter update messages from the client.
         """
-        self.logger.info("New client connected from %s", websocket.remote_address)
+        await websocket.accept()
+        self.logger.info("New client connected")
         self.clients[websocket] = Filter()
         try:
-            async for message in websocket:
-                data = json.loads(message)
-                if data['type'] == 'filter':
-                    self.logger.debug("Client %s updated filters", websocket.remote_address)
+            while True:
+                message = await websocket.receive_json()
+                if message['type'] == 'filter':
+                    self.logger.debug("Client updated filters")
                     new_filter = Filter()
-                    condition = self._parse_condition(data['filter'])
+                    condition = self._parse_condition(message['filter'])
                     new_filter.set_condition(condition)
                     self.clients[websocket] = new_filter
-        except websockets.exceptions.ConnectionClosed:
-            self.logger.info("Client %s disconnected", websocket.remote_address)
-            await websocket.close()
-            del self.clients[websocket]
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            self.logger.error("Error handling client message: %s", str(e), exc_info=False)
-            await websocket.close()
+        except Exception as e:
+            self.logger.info("Client disconnected: %s", str(e))
+        finally:
+            await self.disconnect_client(websocket)
+
+    async def disconnect_client(self, websocket: WebSocket):
+        """
+        Handle client disconnection.
+        
+        Args:
+            websocket: The WebSocket connection to the client
+            
+        Removes the client from the connected clients list.
+        """
+        if websocket in self.clients:
             del self.clients[websocket]
 
     def _parse_condition(self, condition_data: dict) -> ExistsCondition  | RegexCondition | ExactCondition | AllCondition | AnyCondition:
@@ -104,25 +111,14 @@ class Relay:
         matched_clients = 0
 
         # Send to all clients with matching filters
-        for websocket, client_filter in self.clients.items():
+        for websocket, client_filter in list(self.clients.items()):
             if client_filter.matches(message):
                 try:
-                    await websocket.send(json_message)
+                    await websocket.send_text(json_message)
                     matched_clients += 1
-                except websockets.exceptions.ConnectionClosed:
-                    continue
+                except Exception:
+                    await self.disconnect_client(websocket)
 
         self.logger.debug("Message forwarded to %d clients", matched_clients)
         if matched_clients == 0:
             self.logger.debug("No clients matched message of type: %s", schema_ref)
-
-    async def start(self):
-        """
-        Start the WebSocket relay server.
-        
-        Creates a WebSocket server that listens for client connections
-        and runs indefinitely until stopped.
-        """
-        self.logger.info("Starting relay server on %s:%s", RELAY_HOST, RELAY_PORT)
-        async with websockets.serve(self.register_client, RELAY_HOST, RELAY_PORT):
-            await asyncio.Future()  # run forever

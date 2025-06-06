@@ -1,6 +1,7 @@
 import re
 import logging
-from typing import Any, Dict, Sequence, Union, List
+from datetime import datetime
+from typing import Any, Dict, Sequence, Union, List, Optional
 
 logger = logging.getLogger('EddnRelay')
 
@@ -31,8 +32,11 @@ ConditionType = Union[
     'ExistsCondition',
     'ExactCondition',
     'RegexCondition',
+    'RangeCondition',
+    'DateRangeCondition',
     'AllCondition',
-    'AnyCondition'
+    'AnyCondition',
+    'NotCondition'
 ]
 
 class ExistsCondition(FilterCondition):
@@ -192,6 +196,121 @@ class RegexCondition(FilterCondition):
         path = '.'.join(self.path)
         return {path: {'$regex': self.regex.pattern}}
 
+class RangeCondition(FilterCondition):
+    """
+    A condition that matches when a numeric value is within a specified range.
+    
+    Attributes:
+        path: Sequence of keys to traverse in the data
+        min_value: Minimum value (inclusive), None for no lower bound
+        max_value: Maximum value (inclusive), None for no upper bound
+    """
+
+    def __init__(self, path: Sequence[str], min_value: Optional[Union[float, str]] = None, 
+                 max_value: Optional[Union[float, str]] = None):
+        self.path = path
+        if not isinstance(min_value, (float, str, type(None))) or not isinstance(max_value, (float, str, type(None))):
+            raise ValueError("min_value and max_value must be numbers or None")
+        self.min_value = float(min_value) if min_value is not None else None
+        self.max_value = float(max_value) if max_value is not None else None
+        logger.debug("Adding range filter for path: %s (min: %s, max: %s)", 
+                    '.'.join(path), min_value, max_value)
+
+    def check_value(self, data: Dict, path: List[str]) -> bool:
+        current = data
+        remaining_path = list(path)
+        for key in path:
+            if isinstance(current, list):
+                return any(self.check_value(item, remaining_path.copy()) for item in current)
+            if not isinstance(current, dict) or key not in current:
+                logger.debug("RangeCondition: Path %s not found in data", '.'.join(self.path))
+                return False
+            current = current[key]
+            remaining_path = remaining_path[1:]
+            
+        try:
+            if not isinstance(current, (int, float, str)):
+                logger.debug("RangeCondition: Current value is not a number: %s", current)
+                return False
+            current = float(current)
+        except (ValueError, TypeError):
+            return False
+            
+        min_check = current >= self.min_value if self.min_value is not None else True
+        max_check = current <= self.max_value if self.max_value is not None else True
+        result = min_check and max_check
+        
+        logger.debug("RangeCondition: Path %s match result: %s", '.'.join(self.path), result)
+        return result
+
+    def matches(self, data: Dict) -> bool:
+        return self.check_value(data, list(self.path))
+
+    def to_mongo_query(self) -> dict:
+        path = '.'.join(self.path)
+        query = {}
+        if self.min_value is not None:
+            query['$gte'] = self.min_value
+        if self.max_value is not None:
+            query['$lte'] = self.max_value
+        return {path: query} if query else {}
+
+class DateRangeCondition(FilterCondition):
+    """
+    A condition that matches when a datetime value is within a specified range.
+    
+    Attributes:
+        path: Sequence of keys to traverse in the data
+        min_value: Minimum datetime (inclusive), None for no lower bound
+        max_value: Maximum datetime (inclusive), None for no upper bound
+    """
+
+    def __init__(self, path: Sequence[str], min_value: Optional[str] = None, 
+                 max_value: Optional[str] = None):
+        self.path = path
+        if not isinstance(min_value, (str, type(None))) or not isinstance(max_value, (str, type(None))):
+            raise ValueError("min_value and max_value must be ISO format strings or None")
+        self.min_value = datetime.fromisoformat(min_value) if min_value else None
+        self.max_value = datetime.fromisoformat(max_value) if max_value else None
+        logger.debug("Adding date range filter for path: %s (min: %s, max: %s)", 
+                    '.'.join(path), min_value, max_value)
+
+    def check_value(self, data: Dict, path: List[str]) -> bool:
+        current = data
+        remaining_path = list(path)
+        for key in path:
+            if isinstance(current, list):
+                return any(self.check_value(item, remaining_path.copy()) for item in current)
+            if not isinstance(current, dict) or key not in current:
+                logger.debug("DateRangeCondition: Path %s not found in data", '.'.join(self.path))
+                return False
+            current = current[key]
+            remaining_path = remaining_path[1:]
+            
+        try:
+            current = datetime.fromisoformat(str(current))
+        except (ValueError, TypeError):
+            return False
+            
+        min_check = current >= self.min_value if self.min_value is not None else True
+        max_check = current <= self.max_value if self.max_value is not None else True
+        result = min_check and max_check
+        
+        logger.debug("DateRangeCondition: Path %s match result: %s", '.'.join(self.path), result)
+        return result
+
+    def matches(self, data: Dict) -> bool:
+        return self.check_value(data, list(self.path))
+
+    def to_mongo_query(self) -> dict:
+        path = '.'.join(self.path)
+        query = {}
+        if self.min_value is not None:
+            query['$gte'] = self.min_value
+        if self.max_value is not None:
+            query['$lte'] = self.max_value
+        return {path: query} if query else {}
+
 class AllCondition(FilterCondition):
     """
     A condition that matches when all of its sub-conditions match (logical AND).
@@ -245,6 +364,33 @@ class AnyCondition(FilterCondition):
         if not self.conditions:
             return {}
         return {'$or': [c.to_mongo_query() for c in self.conditions]}
+    
+class NotCondition(FilterCondition):
+    """
+    A condition that matches when none of its sub-conditions match (logical NOT).
+    
+    Attributes:
+        conditions: List of conditions that must all not match
+    """
+
+    def __init__(self, conditions: Sequence[ConditionType]):
+        """
+        Initialize a NOT condition.
+        
+        Args:
+            conditions: Sequence of conditions that must all not match
+        """
+        self.conditions: List[ConditionType] = list(conditions)
+
+    def matches(self, data: Dict) -> bool:
+        """Check if none of the sub-conditions match the data."""
+        return not any(condition.matches(data) for condition in self.conditions)
+
+    def to_mongo_query(self) -> dict:
+        """Convert to MongoDB NOT query."""
+        if not self.conditions:
+            return {}
+        return {'$nor': [c.to_mongo_query() for c in self.conditions]}
 
 class Filter:
     """
@@ -287,6 +433,19 @@ class Filter:
         elif isinstance(condition, AnyCondition):
             patterns = [self._build_pattern(c) for c in condition.conditions]
             return '|'.join(f'({p})' for p in patterns)
+        elif isinstance(condition, NotCondition):
+            patterns = [self._build_pattern(c) for c in condition.conditions]
+            return f'(?!{"|".join(patterns)})'
+        elif isinstance(condition, RangeCondition):
+            path = '.'.join(condition.path)
+            min_part = f'"{path}"\\s*:\\s*({condition.min_value})' if condition.min_value is not None else ''
+            max_part = f'"{path}"\\s*:\\s*({condition.max_value})' if condition.max_value is not None else ''
+            return f'(?=.*{min_part})(?=.*{max_part})'
+        elif isinstance(condition, DateRangeCondition):
+            path = '.'.join(condition.path)
+            min_part = f'"{path}"\\s*:\\s*("{condition.min_value.isoformat()}"|{condition.min_value})' if condition.min_value else ''
+            max_part = f'"{path}"\\s*:\\s*("{condition.max_value.isoformat()}"|{condition.max_value})' if condition.max_value else ''
+            return f'(?=.*{min_part})(?=.*{max_part})'
         return ".*"
 
     def matches(self, data: Dict) -> bool:
@@ -321,7 +480,7 @@ class Filter:
             logger.error("Failed to set filters from JSON: %s", e)
             raise
     
-    def _parse_condition_from_json(self, condition_data: dict) -> ExistsCondition  | RegexCondition | ExactCondition | AllCondition | AnyCondition:
+    def _parse_condition_from_json(self, condition_data: dict) -> ConditionType:
         """
         Parse a filter condition from client data.
         
@@ -342,12 +501,19 @@ class Filter:
                 return ExactCondition(condition_data['path'].split('.'), condition_data['value'])
             elif condition_data['type'] == 'regex':
                 return RegexCondition(condition_data['path'].split('.'), condition_data['pattern'])
+            elif condition_data['type'] == 'range':
+                return RangeCondition(condition_data['path'].split('.'),condition_data.get('min_value'),condition_data.get('max_value'))
+            elif condition_data['type'] == 'daterange':
+                return DateRangeCondition(condition_data['path'].split('.'),condition_data.get('min_value'),condition_data.get('max_value'))
             elif condition_data['type'] == 'all':
                 conditions = [self._parse_condition_from_json(c) for c in condition_data['conditions']]
                 return AllCondition(conditions)
             elif condition_data['type'] == 'any':
                 conditions = [self._parse_condition_from_json(c) for c in condition_data['conditions']]
                 return AnyCondition(conditions)
+            elif condition_data['type'] == 'not':
+                conditions = [self._parse_condition_from_json(c) for c in condition_data['conditions']]
+                return NotCondition(conditions)
             raise ValueError(f"Unknown condition type: {condition_data['type']}")
         except KeyError as e:
             logger.error("Missing required field in condition data: %s", e)

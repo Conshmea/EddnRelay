@@ -19,7 +19,7 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["exact", "regex", "all", "any", "exists"]
+            "enum": ["exact", "regex", "all", "any", "exists", "not", "range", "daterange"]
           },
           "path": {
             "type": "string",
@@ -37,6 +37,14 @@
             "type": "array",
             "items": { "$ref": "#/$defs/Condition" },
             "description": "Nested conditions (required for 'all' and 'any')"
+          },
+          "min_value": {
+            "type": ["string", "number", "null"],
+            "description": "Minimum value for range/daterange conditions (inclusive)"
+          },
+          "max_value": {
+            "type": ["string", "number", "null"],
+            "description": "Maximum value for range/daterange conditions (inclusive)"
           }
         },
         "allOf": [
@@ -79,9 +87,32 @@
             "then": {
               "required": ["path"]
             }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "not" } }
+            },
+            "then": {
+              "required": ["conditions"]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "range" } }
+            },
+            "then": {
+              "required": ["path"]
+            }
+          },
+          {
+            "if": {
+              "properties": { "type": { "const": "daterange" } }
+            },
+            "then": {
+              "required": ["path"]
+            }
           }
         ]
       }
     }
   }
-  

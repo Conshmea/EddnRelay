@@ -149,6 +149,40 @@ Connect to the WebSocket server at `ws://<RELAY_HOST>:<RELAY_PORT>/ws` and send 
   }
   ```
 
+- **Not**: Negate one or more conditions
+  ```json
+  {
+    "type": "not",
+    "conditions": [
+      {
+        "type": "exact",
+        "path": "message.event",
+        "value": "Shutdown"
+      }
+    ]
+  }
+  ```
+
+- **Range**: Match numeric values within a range
+  ```json
+  {
+    "type": "range",
+    "path": "message.price",
+    "min_value": 1000,
+    "max_value": 2000
+  }
+  ```
+
+- **Date Range**: Match datetime values within a range
+  ```json
+  {
+    "type": "daterange",
+    "path": "timestamp",
+    "min_value": "2023-01-01T00:00:00Z",
+    "max_value": "2023-12-31T23:59:59Z"
+  }
+  ```
+
 ### Historical Data API
 
 When MongoDB is enabled, you can query the last 24 hours of messages using the REST API:

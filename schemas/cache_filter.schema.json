@@ -28,7 +28,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["exact", "regex", "all", "any", "exists"]
+          "enum": ["exact", "regex", "all", "any", "exists", "not", "range", "daterange"]
         },
         "path": {
           "type": "string",
@@ -46,6 +46,14 @@
           "type": "array",
           "items": { "$ref": "#/$defs/Condition" },
           "description": "Nested conditions (required for 'all' and 'any')"
+        },
+        "min_value": {
+          "type": ["string", "number", "null"],
+          "description": "Minimum value for range/daterange conditions (inclusive)"
+        },
+        "max_value": {
+          "type": ["string", "number", "null"],
+          "description": "Maximum value for range/daterange conditions (inclusive)"
         }
       },
       "allOf": [
@@ -88,6 +96,30 @@
           "then": {
             "required": ["path"]
           }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "not" } }
+          },
+          "then": {
+            "required": ["conditions"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "range" } }
+          },
+          "then": {
+            "required": ["path"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "const": "daterange" } }
+          },
+          "then": {
+            "required": ["path"]
+          }
         }
       ]
     }
@@ -118,6 +150,25 @@
           {
             "type": "exists",
             "path": "message.StarSystem"
+          }
+        ]
+      }
+    },
+    {
+      "filters": {
+        "type": "all",
+        "conditions": [
+          {
+            "type": "range",
+            "path": "message.price",
+            "min_value": 1000,
+            "max_value": 2000
+          },
+          {
+            "type": "daterange",
+            "path": "timestamp",
+            "min_value": "2023-01-01T00:00:00Z",
+            "max_value": "2023-12-31T23:59:59Z"
           }
         ]
       }

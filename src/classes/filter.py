@@ -17,6 +17,15 @@ class FilterCondition:
             bool: True if the condition matches, False otherwise
         """
         raise NotImplementedError
+        
+    def to_mongo_query(self) -> dict:
+        """
+        Convert the condition to a MongoDB query.
+        
+        Returns:
+            dict: A MongoDB query that represents this condition
+        """
+        raise NotImplementedError
 
 ConditionType = Union[
     'ExistsCondition',
@@ -68,6 +77,11 @@ class ExistsCondition(FilterCondition):
         logger.debug("ExistsCondition: Path %s match result: %s", '.'.join(self.path), result)
         return result
 
+    def to_mongo_query(self) -> dict:
+        """Convert to MongoDB exists query."""
+        path = '.'.join(self.path)
+        return {path: {'$exists': True}}
+
 class ExactCondition(FilterCondition):
     """
     A condition that matches when a value at a specified path exactly equals the target value.
@@ -113,6 +127,11 @@ class ExactCondition(FilterCondition):
         result = current == self.value
         logger.debug("ExactCondition: Path %s match result: %s", '.'.join(self.path), result)
         return result
+
+    def to_mongo_query(self) -> dict:
+        """Convert to MongoDB exact match query."""
+        path = '.'.join(self.path)
+        return {path: self.value}
 
 class RegexCondition(FilterCondition):
     """
@@ -168,6 +187,11 @@ class RegexCondition(FilterCondition):
         logger.debug("RegexCondition: Path %s match result: %s", '.'.join(self.path), result)
         return result
 
+    def to_mongo_query(self) -> dict:
+        """Convert to MongoDB regex query."""
+        path = '.'.join(self.path)
+        return {path: {'$regex': self.regex.pattern}}
+
 class AllCondition(FilterCondition):
     """
     A condition that matches when all of its sub-conditions match (logical AND).
@@ -188,6 +212,12 @@ class AllCondition(FilterCondition):
     def matches(self, data: Dict) -> bool:
         """Check if all sub-conditions match the data."""
         return all(condition.matches(data) for condition in self.conditions)
+
+    def to_mongo_query(self) -> dict:
+        """Convert to MongoDB AND query."""
+        if not self.conditions:
+            return {}
+        return {'$and': [c.to_mongo_query() for c in self.conditions]}
 
 class AnyCondition(FilterCondition):
     """
@@ -210,50 +240,54 @@ class AnyCondition(FilterCondition):
         """Check if any sub-condition matches the data."""
         return any(condition.matches(data) for condition in self.conditions)
 
+    def to_mongo_query(self) -> dict:
+        """Convert to MongoDB OR query."""
+        if not self.conditions:
+            return {}
+        return {'$or': [c.to_mongo_query() for c in self.conditions]}
+
 class Filter:
     """
     A filter that can contain multiple conditions to match against EDDN messages.
     
     Attributes:
         root_condition: The top-level condition for this filter
+        pattern: A regex pattern that represents all filter conditions combined
     """
 
     def __init__(self):
         """Initialize a filter with an empty AllCondition."""
         logger.debug("Creating new Filter instance")
         self.root_condition: FilterCondition = AllCondition([])
-
-    def add_exact_filter(self, path: Sequence[str], value: Any) -> None:
+        self.pattern: str = ".*"  # Default pattern matches everything
+    
+    def _build_pattern(self, condition: FilterCondition) -> str:
         """
-        Add an exact match filter condition.
+        Build a regex pattern from a filter condition.
         
         Args:
-            path: Sequence of keys to traverse in the data
-            value: The value to match against
+            condition: The condition to build a pattern from
+            
+        Returns:
+            str: A regex pattern representing the condition
         """
-        if isinstance(self.root_condition, AllCondition):
-            self.root_condition.conditions.append(ExactCondition(path, value))
-
-    def add_regex_filter(self, path: Sequence[str], pattern: str) -> None:
-        """
-        Add a regex match filter condition.
-        
-        Args:
-            path: Sequence of keys to traverse in the data
-            pattern: Regular expression pattern to match against
-        """
-        if isinstance(self.root_condition, AllCondition):
-            self.root_condition.conditions.append(RegexCondition(path, pattern))
-
-    def set_condition(self, condition: FilterCondition) -> None:
-        """
-        Set the root condition for this filter.
-        
-        Args:
-            condition: The new root condition
-        """
-        logger.debug("Setting new root condition of type: %s", condition.__class__.__name__)
-        self.root_condition = condition
+        if isinstance(condition, ExistsCondition):
+            path = '.'.join(condition.path)
+            return f'(?=.*"{path}")'
+        elif isinstance(condition, ExactCondition):
+            path = '.'.join(condition.path)
+            value = re.escape(str(condition.value))
+            return f'(?=.*"{path}"\\s*:\\s*"{value}")'
+        elif isinstance(condition, RegexCondition):
+            path = '.'.join(condition.path)
+            return f'(?=.*"{path}"\\s*:\\s*{condition.regex.pattern})'
+        elif isinstance(condition, AllCondition):
+            patterns = [self._build_pattern(c) for c in condition.conditions]
+            return ''.join(patterns)
+        elif isinstance(condition, AnyCondition):
+            patterns = [self._build_pattern(c) for c in condition.conditions]
+            return '|'.join(f'({p})' for p in patterns)
+        return ".*"
 
     def matches(self, data: Dict) -> bool:
         """
@@ -268,3 +302,65 @@ class Filter:
         result = self.root_condition.matches(data)
         logger.debug("Filter match result: %s", result)
         return result
+    
+    def set_filter_from_json(self, condition_data: dict) -> None:
+        """
+        Set the filter conditions from JSON data.
+        
+        Args:
+            condition_data: Dictionary containing filter configuration
+            
+        Raises:
+            ValueError: If condition type is unknown
+            KeyError: If required fields are missing
+        """
+        try:
+            self.root_condition = self._parse_condition_from_json(condition_data)
+            self.pattern = self._build_pattern(self.root_condition)
+        except (ValueError, KeyError) as e:
+            logger.error("Failed to set filters from JSON: %s", e)
+            raise
+    
+    def _parse_condition_from_json(self, condition_data: dict) -> ExistsCondition  | RegexCondition | ExactCondition | AllCondition | AnyCondition:
+        """
+        Parse a filter condition from client data.
+        
+        Args:
+            condition_data: Dictionary containing condition configuration
+            
+        Returns:
+            FilterCondition: The parsed filter condition object
+            
+        Raises:
+            ValueError: If condition type is unknown
+            KeyError: If required fields are missing
+        """
+        try:
+            if condition_data['type'] == 'exists':
+                return ExistsCondition(condition_data['path'].split('.'))
+            elif condition_data['type'] == 'exact':
+                return ExactCondition(condition_data['path'].split('.'), condition_data['value'])
+            elif condition_data['type'] == 'regex':
+                return RegexCondition(condition_data['path'].split('.'), condition_data['pattern'])
+            elif condition_data['type'] == 'all':
+                conditions = [self._parse_condition_from_json(c) for c in condition_data['conditions']]
+                return AllCondition(conditions)
+            elif condition_data['type'] == 'any':
+                conditions = [self._parse_condition_from_json(c) for c in condition_data['conditions']]
+                return AnyCondition(conditions)
+            raise ValueError(f"Unknown condition type: {condition_data['type']}")
+        except KeyError as e:
+            logger.error("Missing required field in condition data: %s", e)
+            raise
+        except ValueError as e:
+            logger.error("Invalid condition data: %s", e)
+            raise
+
+    def to_mongo_query(self) -> dict:
+        """
+        Convert the filter to a MongoDB query.
+        
+        Returns:
+            dict: A MongoDB query that represents all filter conditions
+        """
+        return self.root_condition.to_mongo_query()

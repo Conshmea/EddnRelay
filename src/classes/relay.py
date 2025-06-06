@@ -3,7 +3,7 @@ from typing import Dict
 import json
 from fastapi import WebSocket
 
-from src.classes.filter import Filter, AllCondition, AnyCondition, ExactCondition, RegexCondition, ExistsCondition
+from src.classes.filter import Filter
 
 class Relay:
     """
@@ -39,8 +39,7 @@ class Relay:
                 if message['type'] == 'filter':
                     self.logger.debug("Client updated filters")
                     new_filter = Filter()
-                    condition = self._parse_condition(message['filter'])
-                    new_filter.set_condition(condition)
+                    new_filter.set_filter_from_json(message['filter'])
                     self.clients[websocket] = new_filter
         except Exception as e:
             self.logger.info("Client disconnected: %s", str(e))
@@ -58,41 +57,6 @@ class Relay:
         """
         if websocket in self.clients:
             del self.clients[websocket]
-
-    def _parse_condition(self, condition_data: dict) -> ExistsCondition  | RegexCondition | ExactCondition | AllCondition | AnyCondition:
-        """
-        Parse a filter condition from client data.
-        
-        Args:
-            condition_data: Dictionary containing condition configuration
-            
-        Returns:
-            FilterCondition: The parsed filter condition object
-            
-        Raises:
-            ValueError: If condition type is unknown
-            KeyError: If required fields are missing
-        """
-        try:
-            if condition_data['type'] == 'exists':
-                return ExistsCondition(condition_data['path'].split('.'))
-            elif condition_data['type'] == 'exact':
-                return ExactCondition(condition_data['path'].split('.'), condition_data['value'])
-            elif condition_data['type'] == 'regex':
-                return RegexCondition(condition_data['path'].split('.'), condition_data['pattern'])
-            elif condition_data['type'] == 'all':
-                conditions = [self._parse_condition(c) for c in condition_data['conditions']]
-                return AllCondition(conditions)
-            elif condition_data['type'] == 'any':
-                conditions = [self._parse_condition(c) for c in condition_data['conditions']]
-                return AnyCondition(conditions)
-            raise ValueError(f"Unknown condition type: {condition_data['type']}")
-        except KeyError as e:
-            self.logger.error("Missing required field in condition data: %s", e)
-            raise
-        except ValueError as e:
-            self.logger.error("Invalid condition data: %s", e)
-            raise
 
     async def process_message(self, message: Dict) -> None:
         """

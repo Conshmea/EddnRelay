@@ -5,7 +5,8 @@ import zlib
 import zmq
 import zmq.asyncio
 
-from src.constants import EDDN_URL, EDDN_TIMEOUT
+from src.constants import EDDN_URL, EDDN_TIMEOUT, USE_MONGODB
+from src.classes.mongo_handler import MongoHandler
 
 class EddnListener:
     """
@@ -52,6 +53,10 @@ class EddnListener:
         self.logger.info("Starting EDDN listener...")
         message_count = 0
         error_count = 0
+        
+        if USE_MONGODB:
+            self.mongo_handler = MongoHandler()
+            await self.mongo_handler.initialize()
 
         while self.running:
             try:
@@ -65,8 +70,10 @@ class EddnListener:
                 message = json.loads(message)
 
                 self.logger.debug("Received message: %s",
-                                  message.get('$schemaRef', 'unknown schema'))
+                                message.get('$schemaRef', 'unknown schema'))
                 await self.relay.process_message(message)
+                if USE_MONGODB:
+                    await self.mongo_handler.store_message(message)
                 message_count += 1
 
                 # Log processing statistics periodically

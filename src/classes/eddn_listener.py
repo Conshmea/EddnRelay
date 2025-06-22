@@ -57,12 +57,14 @@ class EddnListener:
         if USE_MONGODB:
             self.mongo_handler = MongoHandler()
             await self.mongo_handler.initialize()
-
+            
+        self.logger.info("EDDnListener started, waiting for messages...")
         while self.running:
             try:
                 # Receive and process ZMQ message
                 message = await self.subscriber.recv()
                 if not message:
+                    self.logger.debug("Received empty message, skipping")
                     continue
 
                 # Decompress and parse the message

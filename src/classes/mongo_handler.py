@@ -48,7 +48,7 @@ class MongoHandler:
             self.logger.error("Failed to store message: %s", e, exc_info=True)
             raise
 
-    async def get_messages(self, conditions: dict, after_timestamp: str | None = None, max_items: int | None = None) -> List[Dict[str, Any]]:
+    async def get_messages(self, conditions: dict, after_timestamp: str | None = None, max_items: int | None = None) -> List[Dict[str, Any]] | None:
         self.logger.debug("Retrieving messages with conditions: %s, afterTimestamp: %s, max_items: %s",
                          conditions, after_timestamp, max_items)
         try:
@@ -90,4 +90,4 @@ class MongoHandler:
             
         except Exception as e:
             self.logger.error("Failed to retrieve messages: %s", e, exc_info=True)
-            raise
+            return None

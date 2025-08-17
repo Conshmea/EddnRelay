@@ -20,3 +20,5 @@ MONGODB_DATABASE = os.getenv('MONGODB_DATABASE', 'eddn_relay')      # MongoDB da
 
 # Logging configuration
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()          # Application logging level
+
+CACHE_TTL = int(os.getenv('CACHE_TTL', "24"))  # Cache TTL in seconds for the REST API in hours

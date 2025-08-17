@@ -1,11 +1,13 @@
 {
     "configurations": [
         {
-            "name": "Python Debugger: Current File",
+            "name": "Run EDDN Relay",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/src/application.py",
-            "console": "integratedTerminal"
+            "module": "src.application",
+            "python": "E:/PythonAppData/Python/Python311/python.exe",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": true
         }
     ]
 }

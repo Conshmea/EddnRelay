@@ -185,10 +185,10 @@ Connect to the WebSocket server at `ws://<RELAY_HOST>:<RELAY_PORT>/ws` and send 
 
 ### Historical Data API
 
-When MongoDB is enabled, you can query the last 24 hours of messages using the REST API:
+When MongoDB is enabled, you can query the last 7 days of messages using the REST API:
 
 ```http
-POST /messages/24-hour-cache
+POST /messages/cache
 Content-Type: application/json
 
 {

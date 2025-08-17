@@ -5,7 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import DESCENDING
 
 from src.classes.filter import Filter
-from src.constants import MONGODB_URI, MONGODB_DATABASE
+from src.constants import MONGODB_URI, MONGODB_DATABASE, CACHE_TTL
 
 class MongoHandler:
     def __init__(self, uri: str = MONGODB_URI, database: str = MONGODB_DATABASE):
@@ -14,7 +14,7 @@ class MongoHandler:
         self.client = AsyncIOMotorClient(uri)
         self.db = self.client[database]
         self.messages = self.db.messages
-        self.message_expiry = timedelta(hours=24)
+        self.message_expiry = timedelta(hours=CACHE_TTL)
 
     async def initialize(self):
         self.logger.info("Creating MongoDB indexes...")

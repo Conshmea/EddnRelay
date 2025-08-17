@@ -8,7 +8,7 @@ router = APIRouter(prefix="/messages", tags=["messages"])
 mongo_handler = MongoHandler()
 logger = logging.getLogger('EddnRelay')
 
-@router.post("/24-hour-cache")
+@router.post("/cache")
 async def filter_messages(request: Request, data: Dict[str, Any]) -> List[Dict[str, Any]]:
     
     filters = data.get("filters", {})

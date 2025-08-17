@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "EDDN Cache Filter Request",
-  "description": "Schema for the /24-hour-cache endpoint request parameters",
+  "description": "Schema for the /cache endpoint request parameters",
   "type": "object",
   "additionalProperties": false,
   "required": ["filters"],

@@ -19,8 +19,27 @@ class MongoHandler:
     async def initialize(self):
         self.logger.info("Creating MongoDB indexes...")
         try:
-            await self.messages.create_index("timestamp", expireAfterSeconds=int(self.message_expiry.total_seconds()))
+            existing_indexes = await self.messages.list_indexes().to_list(length=None)
+            ttl_index_name = "timestamp_1"
+            expected_expire_seconds = int(self.message_expiry.total_seconds())
+            
+            should_recreate_ttl = False
+            for index in existing_indexes:
+                if index.get("name") == ttl_index_name:
+                    existing_expire_seconds = index.get("expireAfterSeconds")
+                    if existing_expire_seconds != expected_expire_seconds:
+                        self.logger.info("TTL index exists with different expiration (%s vs %s), recreating...", 
+                                       existing_expire_seconds, expected_expire_seconds)
+                        should_recreate_ttl = True
+                        break
+            
+            if should_recreate_ttl:
+                await self.messages.drop_index(ttl_index_name)
+                self.logger.info("Dropped existing TTL index")
+            
+            await self.messages.create_index("timestamp", expireAfterSeconds=expected_expire_seconds)
             await self.messages.create_index([("timestamp", DESCENDING)])
+            
             self.logger.info("Successfully created MongoDB indexes")
         except Exception as e:
             self.logger.error("Failed to create MongoDB indexes: %s", e, exc_info=True)
